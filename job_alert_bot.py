@@ -154,6 +154,10 @@ def main():
 
     if not new_jobs:
         print("Sin ofertas nuevas que matcheen el perfil.")
+        try:
+            send_telegram("🔍 Revisé las búsquedas de hoy y no encontré ofertas nuevas que matcheen tu perfil.")
+        except Exception as e:
+            print(f"Error enviando aviso de 'sin ofertas': {e}")
         return
 
     for job in new_jobs:
