@@ -260,8 +260,8 @@ def extract_links(text, sender_domain):
 
 
 def check_email_alerts():
-    address = os.environ.get("EMAIL_ADDRESS")
-    app_password = os.environ.get("EMAIL_APP_PASSWORD")
+    address = os.environ.get("agustinleonardola@gmail.com")
+    app_password = os.environ.get("tdxqbsaltivtkeaw")
     if not address or not app_password:
         return []
 
