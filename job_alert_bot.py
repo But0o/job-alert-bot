@@ -161,7 +161,8 @@ def main():
     if not new_jobs:
         print("Sin ofertas nuevas que matcheen el perfil.")
         current_hour_utc = datetime.now(timezone.utc).hour
-        if current_hour_utc in NO_JOBS_ALERT_HOURS_UTC:
+        force_test = os.environ.get("FORCE_NO_JOBS_ALERT", "false").lower() == "true"
+        if current_hour_utc in NO_JOBS_ALERT_HOURS_UTC or force_test:
             try:
                 send_telegram("🔍 Revisé las búsquedas y no encontré ofertas nuevas que matcheen tu perfil.")
             except Exception as e:
