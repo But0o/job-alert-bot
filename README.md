@@ -1,77 +1,91 @@
-# Job Alert Bot (Telegram)
+# Job Alert Bot (GitHub Actions, con comandos)
 
-Te avisa por Telegram cuando aparece una oferta nueva (pasantía / junior) en backend,
-networking o ciberseguridad en Argentina. No postula solo — te manda el link para
-que vos apretes "postularme".
+Corre por cron cada 15 minutos (gratis, sin servidor 24/7). Busca ofertas en
+Indeed, revisa mail de alertas de otros portales (opcional), y responde
+comandos que le escribas por Telegram — con hasta ~15 minutos de demora,
+porque no queda escuchando todo el tiempo como una app 24/7.
 
-## PASO 1 — Crear tu bot de Telegram (2 minutos, gratis para siempre, sin cuentas de negocio)
+## Comandos disponibles
 
-1. Abrí Telegram (la app, instalala si no la tenés — está en cualquier tienda de apps).
-2. Buscá el usuario **@BotFather** (es el bot oficial de Telegram para crear bots).
-3. Escribile `/newbot`.
-4. Te va a pedir un nombre (cualquiera, ej: "Mis Alertas Laborales") y un usuario que
-   termine en "bot" (ej: `martin_jobs_bot`).
-5. Te va a devolver un mensaje con un **token**, algo así:
-   `123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw`
-   **Guardá ese token, es el `TELEGRAM_BOT_TOKEN`.**
+- `/buscar` — busca ofertas ya mismo
+- `/mail` — revisa alertas nuevas por mail
+- `/agregar <palabra>` — suma una palabra clave a buscar
+- `/sacar <palabra>` — excluye ofertas con esa palabra
+- `/keywords` — ver palabras clave actuales
+- `/excluidas` — ver palabras excluidas actuales
+- `/estado` — última corrida, cuántas ofertas encontró
+- `/start` o `/ayuda` — ver esta lista
 
-## PASO 2 — Conseguir tu chat_id (1 minuto)
-
-1. Buscá en Telegram tu bot recién creado (por el nombre de usuario que le pusiste)
-   y mandale cualquier mensaje, por ejemplo "hola".
-2. Abrí esta URL en el navegador (reemplazando `TU_TOKEN` por el token del paso 1):
-   `https://api.telegram.org/botTU_TOKEN/getUpdates`
-3. Vas a ver un texto con `"chat":{"id":123456789,...`
-   **Ese número es tu `TELEGRAM_CHAT_ID`.**
-
-## PASO 3 — Probarlo en tu compu
+## PASO 1 — Probarlo en tu compu
 
 ```bash
+python -m venv venv
+source venv/bin/activate        # o "activate.fish" si usás fish
 pip install -r requirements.txt
 
-export TELEGRAM_BOT_TOKEN="8923393273:AAGjv4U_JhylAxOcJYiFX7bvINj3x1EhNY4"
-export TELEGRAM_CHAT_ID=5508133021
+export TELEGRAM_BOT_TOKEN="tu token"
+export TELEGRAM_CHAT_ID="tu chat id"
 
-python job_alert_bot.py
+python bot.py
 ```
 
-Si aparecen ofertas nuevas que matcheen tu perfil, te van a llegar como mensajes de
-Telegram de tu propio bot. Si no aparece nada, probá correrlo de nuevo (a veces
-Indeed tarda o no hay ofertas nuevas ese día — es normal, no rompiste nada).
+Como esta versión corre una vez y termina (no queda escuchando), para probar
+un comando: primero mandale el comando por Telegram (ej: `/estado`), después
+corré `python bot.py` — ahí sí lo va a ver y contestar.
 
-## PASO 4 (opcional) — Que corra solo todos los días sin que prendas la compu
+## PASO 2 — Subir a GitHub
 
-1. Subí esta carpeta completa a un repositorio de GitHub (puede ser privado).
-2. En el repo: `Settings` → `Secrets and variables` → `Actions` → `New repository secret`.
-   Cargá 2 secrets:
-   - `TELEGRAM_BOT_TOKEN` (el del paso 1)
-   - `TELEGRAM_CHAT_ID` (el del paso 2)
-3. Listo. El archivo `.github/workflows/job_alert.yml` corre solo todos los días
-   a las 9am y 18pm (hora Argentina).
-4. Para probarlo manualmente sin esperar: pestaña "Actions" del repo → "Job Alert Bot"
-   → botón "Run workflow".
+```bash
+git add .
+git commit -m "Version GitHub Actions con comandos"
+git push
+```
 
-## ¿Qué es lo único que quizás quieras tocar?
+## PASO 3 — Cargar los secrets
 
-Adentro de `job_alert_bot.py`, arriba de todo, están estas 3 listas — podés editarlas
-libremente, no rompés nada:
+En tu repo: `Settings` → `Secrets and variables` → `Actions` → `New repository secret`.
 
-- `SEARCHES`: qué se busca y en qué ubicación.
-- `KEYWORDS`: palabras que tienen que aparecer para que te llegue el aviso.
-- `EXCLUDE_KEYWORDS`: palabras que descartan una oferta (ej: "senior").
+Obligatorios:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
 
-Todo lo demás del archivo (las funciones) no hace falta que lo toques.
+Opcionales (solo si configuraste la revisión de mail):
+- `EMAIL_ADDRESS`
+- `EMAIL_APP_PASSWORD`
 
-## Nota sobre las fuentes
+## PASO 4 — Probarlo ya corriendo en la nube
 
-El bot usa el feed RSS público de Indeed Argentina. LinkedIn, Bumeran, Zonajobs y
-Computrabajo no ofrecen un feed público equivalente — automatizarlos violaría sus
-términos de servicio y puede banearte la cuenta, así que no están incluidos. La vía
-correcta ahí es crear una alerta de empleo manual en cada portal (te llega por mail).
+Pestaña **Actions** del repo → "Job Alert Bot" → botón **"Run workflow"**.
+Esperá un minuto y revisá Telegram.
 
-## Sobre WhatsApp
+## Cómo persiste el estado
 
-Dejamos ese camino en pausa por la fricción de Meta (cuenta desactivada durante la
-configuración, revisión pendiente). Cuando te llegue la resolución de esa revisión,
-avisame y migramos este mismo bot a WhatsApp en minutos — la función ya está probada,
-solo hay que volver a activarla.
+Este bot no tiene servidor propio, así que guarda todo en 3 archivos JSON
+(`state.json`, `seen_jobs.json`, `seen_emails.json`) que el propio workflow
+**commitea de vuelta al repo** al final de cada corrida (ver el paso
+"Guardar el estado" en `.github/workflows/job_alert.yml`). Por eso vas a ver
+commits automáticos del bot en el historial del repo — es esperado, es cómo
+recuerda qué ofertas ya te mandó y qué palabras clave agregaste.
+
+## Ajustar la frecuencia de los comandos
+
+Si 15 minutos de demora te resulta mucho, podés bajar el intervalo del cron
+en `.github/workflows/job_alert.yml` (ej: `*/5 * * * *` para cada 5 minutos).
+GitHub no garantiza que corra exactamente en ese minuto —en la práctica puede
+haber algunos minutos extra de atraso—, pero sí sigue siendo gratis sin
+importar la frecuencia que seas uses (dentro de límites razonables).
+
+## Ajustar qué se busca
+
+En `bot.py`, arriba de todo:
+- `SEARCHES` — qué se busca y en qué ubicación (Indeed).
+- `DEFAULT_KEYWORDS` — palabras que activan el aviso.
+- `DEFAULT_EXCLUDE_KEYWORDS` — palabras que descartan una oferta.
+- `EMAIL_SOURCES` — dominios de mail que se reenvían por Telegram.
+
+## Mail de alertas de otros portales (opcional)
+
+Mismo procedimiento que antes: activá la alerta por mail en cada portal
+(LinkedIn, Bumeran, Zonajobs, Computrabajo, GetOnBoard), generá una
+contraseña de aplicación de Gmail en myaccount.google.com/apppasswords, y
+cargá `EMAIL_ADDRESS` / `EMAIL_APP_PASSWORD` como secrets.

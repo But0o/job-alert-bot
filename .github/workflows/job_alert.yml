@@ -2,9 +2,10 @@ name: Job Alert Bot
 
 on:
   schedule:
-    # Corre cada hora en punto, de 9am a 18pm hora Argentina (12-21 UTC, Argentina es UTC-3)
-    - cron: "0 12-21 * * *"
-  workflow_dispatch: {}  # también podés correrlo manualmente desde la pestaña Actions
+    # Corre cada 15 minutos. GitHub no garantiza el minuto exacto, puede
+    # atrasarse unos minutos más en horas pico.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}  # para correrlo manualmente desde la pestaña Actions
 
 jobs:
   run-bot:
@@ -25,12 +26,14 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python job_alert_bot.py
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+        run: python bot.py
 
-      - name: Guardar el estado de ofertas ya vistas
+      - name: Guardar el estado (keywords, ofertas vistas, comandos procesados)
         run: |
           git config user.name "job-bot"
           git config user.email "job-bot@users.noreply.github.com"
-          git add seen_jobs.json || true
-          git diff --staged --quiet || git commit -m "update seen_jobs.json"
+          git add state.json seen_jobs.json seen_emails.json || true
+          git diff --staged --quiet || git commit -m "Actualizar estado del bot"
           git push || true
