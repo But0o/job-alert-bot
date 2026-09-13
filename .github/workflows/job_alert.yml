@@ -2,8 +2,8 @@ name: Job Alert Bot
 
 on:
   schedule:
-    # Corre todos los días 12:00 y 21:00 UTC (9am y 6pm hora Argentina)
-    - cron: "0 12,21 * * *"
+    # Corre cada hora en punto, de 9am a 18pm hora Argentina (12-21 UTC, Argentina es UTC-3)
+    - cron: "0 12-21 * * *"
   workflow_dispatch: {}  # también podés correrlo manualmente desde la pestaña Actions
 
 jobs:
