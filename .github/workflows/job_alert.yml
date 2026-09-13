@@ -3,7 +3,7 @@ name: Job Alert Bot
 on:
   schedule:
     # Corre cada 5 minutos. Repo público = minutos gratis sin límite.
-    - cron: "*/5 * * * *"
+    - cron: "*/3 * * * *"
   workflow_dispatch: {}  # para correrlo manualmente desde la pestaña Actions
 
 jobs:
