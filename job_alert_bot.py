@@ -51,22 +51,43 @@ NO_JOBS_ALERT_HOURS_UTC = {12, 21}
 SEARCHES = [
     ("pasantia ciberseguridad", "Argentina"),
     ("pasantia backend", "Argentina"),
+    ("pasantia IT", "Argentina"),
+    ("pasantia desarrollo", "Argentina"),
+    ("pasantia sistemas", "Argentina"),
     ("junior ciberseguridad", "Argentina"),
     ("junior backend python", "Argentina"),
+    ("junior devops", "Argentina"),
+    ("junior cloud security", "Argentina"),
+    ("junior pentester", "Argentina"),
+    ("trainee ciberseguridad", "Argentina"),
+    ("trainee desarrollador", "Argentina"),
+    ("practicante desarrollo", "Argentina"),
     ("analista soc junior", "Argentina"),
+    ("analista ciberseguridad junior", "Argentina"),
     ("networking junior", "Argentina"),
+    ("soporte tecnico linux", "Argentina"),
+    ("administrador linux junior", "Argentina"),
+    ("desarrollador python junior", "Argentina"),
+    ("devsecops junior", "Argentina"),
 ]
 
 # Palabras clave que tienen que aparecer en título o descripción para que te llegue.
 # (case-insensitive, basta con que matchee una)
 KEYWORDS = [
-    "pasant", "junior", "jr.", "jr ", "trainee", "practicante",
-    "backend", "back-end", "ciberseguridad", "cybersecurity", "seguridad informatica",
-    "networking", "redes", "soc", "pentest", "python", "linux", "fastapi", "pasantia",
+    "pasant", "junior", "jr.", "jr ", "trainee", "practicante", "primer empleo",
+    "backend", "back-end", "back end", "fullstack", "full stack",
+    "ciberseguridad", "cybersecurity", "seguridad informatica", "seguridad de la informacion",
+    "networking", "redes", "soc", "pentest", "pentester", "red team", "blue team",
+    "devsecops", "devops", "cloud security", "seguridad en la nube",
+    "python", "linux", "fastapi", "sysadmin", "administrador de sistemas",
+    "ethical hacking", "hacking etico", "vulnerabilidades", "ciso",
 ]
 
 # Palabras que si aparecen, descartan la oferta (para filtrar ruido)
-EXCLUDE_KEYWORDS = ["senior", "ssr.", "semi senior", "lead ", "gerente", "manager"]
+EXCLUDE_KEYWORDS = [
+    "senior", "ssr.", "ssr ", "semi senior", "semi-senior", "sr.", "sr ",
+    "lead ", "gerente", "manager", "director", "jefe de",
+]
 
 STATE_FILE = Path(__file__).parent / "seen_jobs.json"
 
