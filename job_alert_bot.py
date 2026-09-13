@@ -62,7 +62,7 @@ SEARCHES = [
 KEYWORDS = [
     "pasant", "junior", "jr.", "jr ", "trainee", "practicante",
     "backend", "back-end", "ciberseguridad", "cybersecurity", "seguridad informatica",
-    "networking", "redes", "soc", "pentest", "python", "linux", "fastapi",
+    "networking", "redes", "soc", "pentest", "python", "linux", "fastapi", "pasantia",
 ]
 
 # Palabras que si aparecen, descartan la oferta (para filtrar ruido)
