@@ -31,6 +31,7 @@ import os
 import json
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -40,6 +41,11 @@ import requests
 # ---------------------------------------------------------------------------
 # CONFIGURACIÓN — ajustá esto a tu gusto
 # ---------------------------------------------------------------------------
+
+# Horas UTC en las que, si no hay ofertas nuevas, SÍ se manda el aviso de
+# "no encontré nada". Argentina es UTC-3, así que 12 UTC = 9am ART y
+# 21 UTC = 18pm ART (tienen que coincidir con el cron de job_alert.yml).
+NO_JOBS_ALERT_HOURS_UTC = {12, 21}
 
 # Búsquedas a correr. Cada tupla es (query, ubicación).
 SEARCHES = [
@@ -154,10 +160,14 @@ def main():
 
     if not new_jobs:
         print("Sin ofertas nuevas que matcheen el perfil.")
-        try:
-            send_telegram("🔍 Revisé las búsquedas de hoy y no encontré ofertas nuevas que matcheen tu perfil.")
-        except Exception as e:
-            print(f"Error enviando aviso de 'sin ofertas': {e}")
+        current_hour_utc = datetime.now(timezone.utc).hour
+        if current_hour_utc in NO_JOBS_ALERT_HOURS_UTC:
+            try:
+                send_telegram("🔍 Revisé las búsquedas y no encontré ofertas nuevas que matcheen tu perfil.")
+            except Exception as e:
+                print(f"Error enviando aviso de 'sin ofertas': {e}")
+        else:
+            print("(No es horario de aviso de 'sin ofertas' — se manda solo a las 9am y 18pm ART)")
         return
 
     for job in new_jobs:
