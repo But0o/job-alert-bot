@@ -10,8 +10,9 @@ Cada vez que se ejecuta:
   2. Busca ofertas nuevas en Indeed (solo en horario 9am-18pm hora Argentina).
   3. Revisa mail de alertas de otros portales, si configuraste Gmail.
 
-Comandos disponibles (mismos que la versión anterior):
+Comandos disponibles:
     /buscar            -> busca ofertas ya mismo
+    /escaneo           -> escaneo profundo, mas busquedas + paginacion
     /mail              -> revisa mail de alertas ahora
     /agregar <palabra> -> suma palabra clave
     /sacar <palabra>   -> excluye ofertas con esa palabra
@@ -122,9 +123,19 @@ DEFAULT_KEYWORDS = [
 ]
 
 DEFAULT_EXCLUDE_KEYWORDS = [
-    "senior", "ssr.", "ssr ", "semi senior", "semi-senior", "sr.", "sr ",
-    "lead ", "gerente", "manager", "director", "jefe de",
+    "senior", "ssr.", "ssr ", "ssr/", "/ssr", "semi senior", "semi-senior",
+    "sr.", "sr ", "sr/", "/sr", "lead ", "team lead", "tech lead",
+    "gerente", "manager", "director", "jefe de", "coordinador", "coordinadora",
+    "responsable de", "head of", "principal ", "staff engineer", "arquitecto",
+    "amplia experiencia", "experiencia comprobada", "experiencia sólida",
+    "experiencia solida",
 ]
+
+# Patrón para detectar pedidos de "X años de experiencia" con X >= 3, que es
+# la forma más común de pedir seniority sin usar la palabra "senior" en sí.
+_ANIOS_EXPERIENCIA_RE = re.compile(
+    r"(\d+)\s*\+?\s*(?:años?|years?)\s*(?:de\s+)?(?:experiencia|experience)"
+)
 
 # Horas UTC en las que corre la búsqueda. Argentina es UTC-3, así que esto
 # corresponde a 9am-18pm hora Argentina.
@@ -227,6 +238,14 @@ def matches_profile(title, summary):
     text = f"{title} {summary}".lower()
     if any(bad in text for bad in STATE["exclude_keywords"]):
         return False
+    # Filtrar pedidos de "3+ años de experiencia" o más (típico de semi-sr/sr
+    # aunque el aviso no use la palabra "senior" en ningún lado)
+    for match in _ANIOS_EXPERIENCIA_RE.finditer(text):
+        try:
+            if int(match.group(1)) >= 3:
+                return False
+        except ValueError:
+            pass
     return any(kw in text for kw in STATE["keywords"])
 
 
@@ -301,37 +320,75 @@ def decode_mime(value):
     return out
 
 
-def extract_body_text(msg):
-    if msg.is_multipart():
-        for part in msg.walk():
-            ctype = part.get_content_type()
-            if ctype in ("text/plain", "text/html"):
-                try:
-                    payload = part.get_payload(decode=True).decode(
-                        part.get_content_charset() or "utf-8", errors="ignore"
-                    )
-                except Exception:
-                    continue
-                return clean_html(payload) if ctype == "text/html" else payload
-    else:
-        try:
-            payload = msg.get_payload(decode=True).decode(msg.get_content_charset() or "utf-8", errors="ignore")
-            return clean_html(payload) if msg.get_content_type() == "text/html" else payload
-        except Exception:
-            return ""
-    return ""
+def extract_raw_html(msg):
+    """Devuelve el HTML crudo del mail (sin limpiar tags), o None si no hay parte HTML."""
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    for part in parts:
+        if part.get_content_type() == "text/html":
+            try:
+                return part.get_payload(decode=True).decode(
+                    part.get_content_charset() or "utf-8", errors="ignore"
+                )
+            except Exception:
+                continue
+    return None
 
 
-def extract_links(text, sender_domain):
-    urls = re.findall(r'https?://[^\s"<>]+', text)
-    relevant = [u for u in urls if sender_domain.split(".")[0] in u]
-    seen, out = set(), []
-    for u in relevant:
-        short = u.split("?")[0]
-        if short not in seen:
-            seen.add(short)
-            out.append(short)
-    return out[:5]
+# Patrón de URL de una OFERTA INDIVIDUAL real, por portal (no búsquedas, no
+# configuración, no política de privacidad, etc.)
+JOB_URL_PATTERNS = {
+    "LinkedIn": re.compile(r"/jobs/view/\d+"),
+    "Bumeran": re.compile(r"/empleos?/[^/?#\"']+-\d{4,}"),
+    "Zonajobs": re.compile(r"/empleos?/[^/?#\"']+-\d{4,}"),
+    "Computrabajo": re.compile(r"/(ofertas-de-trabajo|trabajo-de)/"),
+    "GetOnBoard": re.compile(r"/jobs/[^/?#\"']+/[^/?#\"']+"),
+}
+
+# Links que claramente NO son una oferta, aunque matcheen el patrón anterior
+# por casualidad (poco probable, pero por las dudas).
+JUNK_LINK_RE = re.compile(
+    r"(unsubscribe|opt-?out|preferences|settings|privacy|legal|terms|"
+    r"help\b|support|notification|manage-alert|email-setting|feed\?|"
+    r"/search\?|/search/)", re.I
+)
+
+# Textos de ancla genéricos que no sirven como título (se descartan y se usa
+# un título de respaldo en su lugar).
+GENERIC_ANCHOR_TEXTS = {
+    "ver oferta", "ver empleo", "aplicar", "postularme", "postular",
+    "ver más", "ver mas", "click aquí", "click aqui", "apply now",
+    "view job", "see job", "ver todas las ofertas", "ver todos los empleos",
+}
+
+
+def extract_job_links(html, portal):
+    """Busca <a href="...">texto</a> dentro del HTML del mail, y se queda solo
+    con los links que matchean el patrón de oferta individual del portal."""
+    if not html:
+        return []
+    pattern = JOB_URL_PATTERNS.get(portal)
+    if not pattern:
+        return []
+
+    anchor_re = re.compile(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I | re.S)
+    seen_urls, out = set(), []
+    for url, inner_html in anchor_re.findall(html):
+        if JUNK_LINK_RE.search(url):
+            continue
+        if not pattern.search(url):
+            continue
+        short_url = url.split("?")[0]
+        if short_url in seen_urls:
+            continue
+        seen_urls.add(short_url)
+
+        title = clean_html(inner_html).strip()
+        if not title or len(title) < 10 or title.lower() in GENERIC_ANCHOR_TEXTS:
+            title = None
+        out.append({"link": short_url, "title": title})
+        if len(out) >= 15:  # tope por mail, para no explotar si trae un montón
+            break
+    return out
 
 
 def check_email_alerts():
@@ -365,12 +422,24 @@ def check_email_alerts():
             msg_id = msg.get("Message-ID", str(eid))
             if msg_id in SEEN_EMAILS:
                 continue
-
-            subject = decode_mime(msg.get("Subject", "(sin asunto)"))
-            body = extract_body_text(msg)
-            links = extract_links(body, sender_domain)
-            results.append({"portal": portal, "subject": subject, "links": links, "body": body[:1000]})
             SEEN_EMAILS.add(msg_id)
+
+            raw_html = extract_raw_html(msg)
+            job_links = extract_job_links(raw_html, portal)
+
+            for job in job_links:
+                # dedupe contra el mismo set que usa Indeed, para no repetir
+                # una oferta que ya viste por otra vía
+                if job["link"] in SEEN:
+                    continue
+                title = job["title"] or f"Nueva oferta en {portal}"
+                # mismo filtro de seniority/keywords que usa Indeed, aplicado
+                # sobre el título (es lo único que tenemos del aviso en el mail)
+                if not matches_profile(title, ""):
+                    SEEN.add(job["link"])  # igual la marcamos vista, para no re-chequearla cada vez
+                    continue
+                SEEN.add(job["link"])
+                results.append({"portal": portal, "title": title, "link": job["link"]})
         imap.close()
     finally:
         imap.logout()
@@ -378,9 +447,8 @@ def check_email_alerts():
 
 
 def format_email_alert_message(item):
-    tag = get_modality_tag(item["subject"], item.get("body", ""))
-    links_txt = "\n".join(item["links"]) if item["links"] else "(sin link detectado, revisá el mail original)"
-    return f"📧 *{item['portal']}:* {item['subject']}\n{tag}\n{links_txt}"
+    tag = get_modality_tag(item["title"], "")
+    return f"📧 *{item['portal']}:* {item['title']}\n{tag}\n🔗 {item['link']}"
 
 # ---------------------------------------------------------------------------
 # COMANDOS
