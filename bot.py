@@ -263,8 +263,29 @@ def fetch_new_jobs(searches=None, pages=0):
     return new_jobs
 
 
+REMOTE_KEYWORDS = [
+    "remoto", "remota", "remote", "home office", "teletrabajo",
+    "trabajo desde casa", "100% remoto", "full remoto",
+]
+
+HYBRID_KEYWORDS = [
+    "hibrido", "híbrido", "hybrid", "semi presencial", "semi-presencial",
+    "mixta", "modalidad mixta",
+]
+
+
+def get_modality_tag(title, summary):
+    text = f"{title} {summary}".lower()
+    if any(kw in text for kw in REMOTE_KEYWORDS):
+        return "🏠 *REMOTO*\n"
+    if any(kw in text for kw in HYBRID_KEYWORDS):
+        return "🔀 *HÍBRIDO*\n"
+    return "🏢 *Presencial/no especificado*\n"
+
+
 def format_job_message(job):
-    return f"🔔 *Nueva oferta:* {job['title']}\n\n📝 {job['summary']}\n\n🔗 Postularme: {job['link']}"
+    tag = get_modality_tag(job["title"], job.get("summary", ""))
+    return f"🔔 *Nueva oferta:* {job['title']}\n{tag}\n📝 {job['summary']}\n\n🔗 Postularme: {job['link']}"
 
 # ---------------------------------------------------------------------------
 # MAIL DE ALERTAS (LinkedIn, Bumeran, Zonajobs, Computrabajo, GetOnBoard)
@@ -348,7 +369,7 @@ def check_email_alerts():
             subject = decode_mime(msg.get("Subject", "(sin asunto)"))
             body = extract_body_text(msg)
             links = extract_links(body, sender_domain)
-            results.append({"portal": portal, "subject": subject, "links": links})
+            results.append({"portal": portal, "subject": subject, "links": links, "body": body[:1000]})
             SEEN_EMAILS.add(msg_id)
         imap.close()
     finally:
@@ -357,8 +378,9 @@ def check_email_alerts():
 
 
 def format_email_alert_message(item):
+    tag = get_modality_tag(item["subject"], item.get("body", ""))
     links_txt = "\n".join(item["links"]) if item["links"] else "(sin link detectado, revisá el mail original)"
-    return f"📧 *{item['portal']}:* {item['subject']}\n\n{links_txt}"
+    return f"📧 *{item['portal']}:* {item['subject']}\n{tag}\n{links_txt}"
 
 # ---------------------------------------------------------------------------
 # COMANDOS
