@@ -74,6 +74,43 @@ SEARCHES = [
     ("junior soporte tecnico", "Argentina"),
 ]
 
+# ---------------------------------------------------------------------------
+# BÚSQUEDA "PROFUNDA" GENERADA AUTOMÁTICAMENTE (más cobertura, pero más lenta)
+#
+# Combina "niveles" x "áreas" para armar muchas más variantes de búsqueda sin
+# tener que escribirlas a mano. Agregar una palabra a NIVELES o AREAS genera
+# automáticamente todas las combinaciones nuevas.
+#
+# OJO: por volumen (más consultas a Indeed + páginas adicionales por
+# paginación), esto NO corre en cada ejecución del cron (cada 5 min sería
+# demasiados pedidos seguidos y arriesga que Indeed bloquee el IP). Corre
+# solo 2 veces por día, en las mismas horas que ya usábamos para el aviso de
+# "sin ofertas" (9am y 18pm ART) — ver DEEP_SCAN_HOURS_UTC más abajo.
+# ---------------------------------------------------------------------------
+import itertools
+
+NIVELES = ["pasantia", "junior", "trainee", "practicante"]
+
+AREAS = [
+    "backend", "ciberseguridad", "sistemas", "IT", "desarrollo",
+    "soporte tecnico", "redes", "devops", "cloud security", "pentester",
+    "python", "linux", "sysadmin", "soc", "seguridad informatica",
+]
+
+_auto_searches = [(f"{n} {a}", "Argentina") for n, a in itertools.product(NIVELES, AREAS)]
+
+_vistos = {(q.lower(), l.lower()) for q, l in SEARCHES}
+DEEP_SEARCHES_EXTRA = [
+    (q, l) for q, l in _auto_searches if (q.lower(), l.lower()) not in _vistos
+]
+
+# Cuántas "páginas" adicionales de 25 resultados pedir por búsqueda en el
+# escaneo profundo (0 = solo la primera tanda, sin paginación extra).
+DEEP_SCAN_PAGES = 2
+
+DEEP_SCAN_HOURS_UTC = {12, 21}  # 9am y 18pm hora Argentina
+
+
 DEFAULT_KEYWORDS = [
     "pasant", "junior", "jr.", "jr ", "trainee", "practicante", "primer empleo",
     "backend", "back-end", "back end", "fullstack", "full stack",
@@ -173,8 +210,11 @@ def get_updates(offset):
 FEED_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 
-def build_rss_url(query, location):
-    return f"https://ar.indeed.com/rss?q={quote_plus(query)}&l={quote_plus(location)}"
+def build_rss_url(query, location, start=0):
+    url = f"https://ar.indeed.com/rss?q={quote_plus(query)}&l={quote_plus(location)}"
+    if start:
+        url += f"&start={start}"
+    return url
 
 
 def clean_html(raw_html):
@@ -190,22 +230,36 @@ def matches_profile(title, summary):
     return any(kw in text for kw in STATE["keywords"])
 
 
-def fetch_new_jobs():
+def fetch_new_jobs(searches=None, pages=0):
+    """
+    Busca en Indeed. `searches` permite pasar una lista custom (si no, usa la
+    lista rápida SEARCHES). `pages` es cuántas páginas extra de 25 resultados
+    pedir por búsqueda con &start= (0 = solo la primera tanda).
+    """
+    searches = searches if searches is not None else SEARCHES
     new_jobs = []
-    for query, location in SEARCHES:
-        url = build_rss_url(query, location)
-        feed = feedparser.parse(url, request_headers=FEED_HEADERS)
-        for entry in feed.entries:
-            job_id = entry.get("id") or entry.get("link")
-            if job_id in SEEN:
+    for query, location in searches:
+        for page in range(pages + 1):
+            start = page * 25
+            url = build_rss_url(query, location, start=start)
+            try:
+                feed = feedparser.parse(url, request_headers=FEED_HEADERS)
+            except Exception as e:
+                print(f"Error consultando '{query}' (start={start}): {e}")
                 continue
-            title = entry.get("title", "Puesto sin título")
-            summary = clean_html(entry.get("summary", ""))
-            link = entry.get("link", "")
-            if not matches_profile(title, summary):
-                continue
-            new_jobs.append({"id": job_id, "title": title, "summary": summary[:280], "link": link})
-            SEEN.add(job_id)
+            if not feed.entries:
+                break  # no hay más páginas para esta búsqueda, no seguimos pidiendo de más
+            for entry in feed.entries:
+                job_id = entry.get("id") or entry.get("link")
+                if job_id in SEEN:
+                    continue
+                title = entry.get("title", "Puesto sin título")
+                summary = clean_html(entry.get("summary", ""))
+                link = entry.get("link", "")
+                if not matches_profile(title, summary):
+                    continue
+                new_jobs.append({"id": job_id, "title": title, "summary": summary[:280], "link": link})
+                SEEN.add(job_id)
     return new_jobs
 
 
@@ -260,8 +314,8 @@ def extract_links(text, sender_domain):
 
 
 def check_email_alerts():
-    address = os.environ.get("agustinleonardola@gmail.com")
-    app_password = os.environ.get("tdxqbsaltivtkeaw")
+    address = os.environ.get("EMAIL_ADDRESS")
+    app_password = os.environ.get("EMAIL_APP_PASSWORD")
     if not address or not app_password:
         return []
 
@@ -311,10 +365,11 @@ def format_email_alert_message(item):
 # ---------------------------------------------------------------------------
 
 def cmd_start():
-    send_message(
+    msg_text = (
         "🤖 Job Alert Bot activo (versión GitHub Actions).\n\n"
         "Comandos disponibles:\n"
-        "/buscar - buscar ofertas ahora (Indeed)\n"
+        "/buscar - buscar ofertas ahora (búsqueda rápida, Indeed)\n"
+        "/escaneo - escaneo profundo, más búsquedas + paginación (tarda más)\n"
         "/mail - revisar alertas nuevas por mail\n"
         "/agregar <palabra> - sumar palabra clave\n"
         "/sacar <palabra> - excluir palabra\n"
@@ -324,6 +379,7 @@ def cmd_start():
         "⏱️ Nota: como corre por cron y no 24/7, los comandos tardan hasta "
         "el intervalo configurado en responder (no es instantáneo)."
     )
+    send_message(msg_text)
 
 
 def cmd_buscar():
@@ -332,6 +388,22 @@ def cmd_buscar():
     STATE["last_run_found"] = len(new_jobs)
     if not new_jobs:
         send_message("No encontré ofertas nuevas que matcheen tu perfil.")
+        return
+    for job in new_jobs:
+        send_message(format_job_message(job))
+        time.sleep(1)
+
+
+def cmd_escaneo():
+    send_message(
+        f"🔎 Iniciando escaneo profundo ({len(DEEP_SEARCHES_EXTRA)} búsquedas extra, "
+        f"{DEEP_SCAN_PAGES + 1} páginas c/u). Puede tardar varios minutos..."
+    )
+    new_jobs = fetch_new_jobs(searches=DEEP_SEARCHES_EXTRA, pages=DEEP_SCAN_PAGES)
+    STATE["last_run"] = datetime.now(timezone.utc).isoformat()
+    STATE["last_run_found"] = len(new_jobs)
+    if not new_jobs:
+        send_message("Escaneo profundo terminado: no encontré ofertas nuevas.")
         return
     for job in new_jobs:
         send_message(format_job_message(job))
@@ -390,7 +462,8 @@ def cmd_estado():
         f"📊 Estado del bot\n\n"
         f"Última corrida: {last_run_txt}\n"
         f"Ofertas encontradas esa vez: {STATE.get('last_run_found', 0)}\n"
-        f"Búsquedas configuradas: {len(SEARCHES)}\n"
+        f"Búsquedas rápidas (cada corrida): {len(SEARCHES)}\n"
+        f"Búsquedas del escaneo profundo (9am/18pm): {len(DEEP_SEARCHES_EXTRA)}\n"
         f"Palabras clave: {len(STATE['keywords'])}\n"
         f"Palabras excluidas: {len(STATE['exclude_keywords'])}"
     )
@@ -400,6 +473,7 @@ COMMANDS = {
     "/start": lambda args: cmd_start(),
     "/ayuda": lambda args: cmd_start(),
     "/buscar": lambda args: cmd_buscar(),
+    "/escaneo": lambda args: cmd_escaneo(),
     "/mail": lambda args: cmd_mail(),
     "/agregar": cmd_agregar,
     "/sacar": cmd_sacar,
@@ -446,6 +520,16 @@ def run_scheduled_search():
         return
 
     new_jobs = fetch_new_jobs()
+
+    # Escaneo profundo: solo 2 veces por día (9am y 18pm ART), con las
+    # búsquedas extra generadas automáticamente + paginación. El objetivo es
+    # cubrir también ofertas ya publicadas que las 22 búsquedas rápidas no
+    # hayan encontrado, sin golpear a Indeed con esas ~60 búsquedas extra en
+    # cada corrida de 5 minutos.
+    if now_hour in DEEP_SCAN_HOURS_UTC:
+        deep_jobs = fetch_new_jobs(searches=DEEP_SEARCHES_EXTRA, pages=DEEP_SCAN_PAGES)
+        new_jobs += deep_jobs
+
     STATE["last_run"] = datetime.now(timezone.utc).isoformat()
     STATE["last_run_found"] = len(new_jobs)
 

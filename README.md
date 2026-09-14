@@ -7,7 +7,8 @@ porque no queda escuchando todo el tiempo como una app 24/7.
 
 ## Comandos disponibles
 
-- `/buscar` — busca ofertas ya mismo
+- `/buscar` — busca ofertas ya mismo (las 23 búsquedas rápidas)
+- `/escaneo` — escaneo profundo: ~47 búsquedas extra generadas automáticamente + paginación (trae más volumen, tarda varios minutos)
 - `/mail` — revisa alertas nuevas por mail
 - `/agregar <palabra>` — suma una palabra clave a buscar
 - `/sacar <palabra>` — excluye ofertas con esa palabra
@@ -15,6 +16,40 @@ porque no queda escuchando todo el tiempo como una app 24/7.
 - `/excluidas` — ver palabras excluidas actuales
 - `/estado` — última corrida, cuántas ofertas encontró
 - `/start` o `/ayuda` — ver esta lista
+
+## Cómo funciona la cobertura ampliada (búsquedas automáticas + paginación)
+
+Para cubrir no solo ofertas nuevas sino también las ya publicadas, sin
+saturar a Indeed de pedidos cada 5 minutos, el bot trabaja en dos velocidades:
+
+1. **Búsqueda rápida** (`SEARCHES`, 23 frases escritas a mano): corre en
+   *cada* ejecución del cron dentro del horario 9am-18pm ART. Es la que te
+   avisa apenas aparece algo nuevo.
+
+2. **Escaneo profundo** (`DEEP_SEARCHES_EXTRA`, generadas automáticamente
+   combinando `NIVELES` × `AREAS`): corre solo 2 veces por día (9am y 18pm
+   ART), y además pide varias "páginas" de resultados por búsqueda usando
+   el parámetro `&start=` del RSS de Indeed (25 resultados por página).
+   Esto multiplica la cobertura sin generar tráfico excesivo todo el día.
+
+**Para agregar más variantes de búsqueda sin escribir frases a mano:**
+editá las listas `NIVELES` o `AREAS` en `bot.py` — cualquier palabra que
+agregues ahí se combina automáticamente con todas las demás.
+
+**Nota sobre la paginación:** el parámetro `&start=` no es parte de una API
+oficial y documentada de Indeed — es un remanente de una versión vieja de su
+feed que hoy en día sigue funcionando, pero puede dejar de hacerlo sin
+aviso. Si en algún momento notás que el escaneo profundo deja de traer más
+resultados que antes, puede ser por eso — no significa que el bot esté roto,
+simplemente Indeed le sacó soporte a ese parámetro.
+
+**Nota sobre el volumen de pedidos:** con este diseño, el bot hace
+aproximadamente ~2.700 consultas/día a Indeed en horario laboral (búsqueda
+rápida) más ~280 consultas 2 veces al día (escaneo profundo). Es tráfico
+considerable — si en algún momento Indeed empieza a bloquear o devolver
+menos resultados de lo esperado, puede ser una señal de rate-limiting. Se
+puede bajar reduciendo `DEEP_SCAN_PAGES` (menos páginas por búsqueda) o
+achicando las listas `NIVELES`/`AREAS`.
 
 ## PASO 1 — Probarlo en tu compu
 
