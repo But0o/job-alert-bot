@@ -39,6 +39,7 @@ import time
 import itertools
 import imaplib
 import email
+import calendar
 from email.header import decode_header
 from datetime import datetime, timezone
 from pathlib import Path
@@ -127,6 +128,7 @@ EMAIL_SOURCES = {
 STATE_FILE = Path(__file__).parent / "state.json"
 SEEN_FILE = Path(__file__).parent / "seen_jobs.json"
 SEEN_EMAILS_FILE = Path(__file__).parent / "seen_emails.json"
+MAX_JOB_AGE_DAYS = 15
 
 # ---------------------------------------------------------------------------
 # PERSISTENCIA (archivos locales en el disco de la VM)
@@ -182,6 +184,15 @@ def clean_html(raw_html):
     return text
 
 
+def is_too_old(entry, max_days=MAX_JOB_AGE_DAYS):
+    published = entry.get("published_parsed") or entry.get("updated_parsed")
+    if not published:
+        return False
+    entry_ts = calendar.timegm(published)
+    age_days = (time.time() - entry_ts) / 86400
+    return age_days > max_days
+
+
 def matches_profile(title, summary):
     text = f"{title} {summary}".lower()
     if any(bad in text for bad in STATE["exclude_keywords"]):
@@ -212,6 +223,9 @@ def fetch_new_jobs(searches=None, pages=0):
             for entry in feed.entries:
                 job_id = entry.get("id") or entry.get("link")
                 if job_id in SEEN:
+                    continue
+                if is_too_old(entry):
+                    SEEN.add(job_id)
                     continue
                 title = entry.get("title", "Puesto sin título")
                 summary = clean_html(entry.get("summary", ""))
