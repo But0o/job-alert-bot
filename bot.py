@@ -9,6 +9,7 @@ sin parar (python-telegram-bot con long polling), así que:
     de que nada externo la dispare.
   - El estado (palabras clave, ofertas ya vistas) se guarda en archivos
     locales en el disco de la VM — no hace falta comitear nada a git.
+  - Tiene un teclado de botones en Telegram para los comandos más usados.
 
 Comandos:
     /buscar            -> busca ofertas ya mismo (Indeed, búsqueda rápida)
@@ -19,7 +20,7 @@ Comandos:
     /keywords          -> ver palabras clave actuales
     /excluidas         -> ver palabras excluidas actuales
     /estado            -> última corrida, cuántas ofertas encontró
-    /start /ayuda      -> lista de comandos
+    /start /ayuda      -> lista de comandos + activa el teclado de botones
 
 Requiere:
     pip install "python-telegram-bot[job-queue]" feedparser requests
@@ -44,7 +45,7 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 import feedparser
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 # ---------------------------------------------------------------------------
@@ -383,6 +384,18 @@ def format_email_alert_message(item):
 def is_authorized(update: Update) -> bool:
     return str(update.effective_chat.id) == str(os.environ["TELEGRAM_CHAT_ID"])
 
+
+# Teclado de botones que reemplaza al teclado normal en Telegram
+REPLY_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("/buscar"), KeyboardButton("/escaneo")],
+        [KeyboardButton("/mail"), KeyboardButton("/estado")],
+        [KeyboardButton("/keywords"), KeyboardButton("/excluidas")],
+    ],
+    resize_keyboard=True,  # botones más chicos, no ocupan toda la pantalla
+    is_persistent=True,    # se queda fijo, no hay que volver a pedirlo
+)
+
 # ---------------------------------------------------------------------------
 # COMANDOS
 # ---------------------------------------------------------------------------
@@ -400,7 +413,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/sacar <palabra> - excluir palabra\n"
         "/keywords - ver palabras clave actuales\n"
         "/excluidas - ver palabras excluidas\n"
-        "/estado - ver última corrida"
+        "/estado - ver última corrida\n\n"
+        "👇 Usá los botones de abajo para los comandos más comunes.",
+        reply_markup=REPLY_KEYBOARD,
     )
 
 
@@ -563,9 +578,24 @@ async def scheduled_search(context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # ---------------------------------------------------------------------------
 
+async def _post_init(app: Application):
+    """Configura el menú nativo de comandos de Telegram (el ícono '/' al lado del teclado)."""
+    await app.bot.set_my_commands([
+        BotCommand("buscar", "Buscar ofertas ahora (rápida)"),
+        BotCommand("escaneo", "Escaneo profundo (más búsquedas)"),
+        BotCommand("mail", "Revisar alertas por mail"),
+        BotCommand("agregar", "Sumar palabra clave"),
+        BotCommand("sacar", "Excluir palabra"),
+        BotCommand("keywords", "Ver palabras clave"),
+        BotCommand("excluidas", "Ver palabras excluidas"),
+        BotCommand("estado", "Ver última corrida"),
+        BotCommand("ayuda", "Ver esta lista y mostrar botones"),
+    ])
+
+
 def main():
     token = os.environ["TELEGRAM_BOT_TOKEN"]
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).post_init(_post_init).build()
 
     app.add_handler(CommandHandler(["start", "ayuda"], cmd_start))
     app.add_handler(CommandHandler("buscar", cmd_buscar))
