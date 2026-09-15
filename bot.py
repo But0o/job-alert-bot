@@ -10,6 +10,7 @@ sin parar (python-telegram-bot con long polling), así que:
   - El estado (palabras clave, ofertas ya vistas) se guarda en archivos
     locales en el disco de la VM — no hace falta comitear nada a git.
   - Tiene un teclado de botones en Telegram para los comandos más usados.
+  - Verifica que cada oferta siga aceptando postulaciones antes de mandarla.
 
 Comandos:
     /buscar            -> busca ofertas ya mismo (Indeed, búsqueda rápida)
@@ -36,16 +37,17 @@ import os
 import json
 import re
 import time
+import calendar
 import itertools
 import imaplib
 import email
-import calendar
 from email.header import decode_header
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
 
 import feedparser
+import requests
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -128,7 +130,6 @@ EMAIL_SOURCES = {
 STATE_FILE = Path(__file__).parent / "state.json"
 SEEN_FILE = Path(__file__).parent / "seen_jobs.json"
 SEEN_EMAILS_FILE = Path(__file__).parent / "seen_emails.json"
-MAX_JOB_AGE_DAYS = 15
 
 # ---------------------------------------------------------------------------
 # PERSISTENCIA (archivos locales en el disco de la VM)
@@ -184,13 +185,48 @@ def clean_html(raw_html):
     return text
 
 
+# Avisos publicados hace más de esta cantidad de días se descartan: Indeed no
+# informa si un aviso sigue aceptando postulaciones, pero cuanto más viejo,
+# más probable que ya esté cerrado. Ajustable si te parece muy corto/largo.
+MAX_JOB_AGE_DAYS = 15
+
+
 def is_too_old(entry, max_days=MAX_JOB_AGE_DAYS):
     published = entry.get("published_parsed") or entry.get("updated_parsed")
     if not published:
-        return False
-    entry_ts = calendar.timegm(published)
+        return False  # si no sabemos la fecha, no lo descartamos por las dudas
+    entry_ts = calendar.timegm(published)  # timestamp UTC
     age_days = (time.time() - entry_ts) / 86400
     return age_days > max_days
+
+
+# Frases que indican que una oferta ya no acepta postulaciones, buscadas
+# directo en el texto de la página del aviso (no solo en el RSS, que no
+# informa esto).
+CLOSED_PHRASES = [
+    "ya no acepta postulaciones", "ya no acepta solicitudes",
+    "posición cerrada", "posicion cerrada", "vacante cerrada",
+    "empleo no disponible", "oferta no disponible",
+    "no longer accepting applications", "position has been filled",
+    "this job is no longer available", "job posting has expired",
+    "esta oferta ha expirado", "esta vacante ha finalizado",
+    "ya no está disponible", "ya no esta disponible",
+]
+
+
+def is_job_still_open(link):
+    """Abre el link real de la oferta y revisa si la página dice que ya
+    cerró. Si falla la verificación (timeout, bloqueo, etc.) NO se descarta
+    la oferta por las dudas — mejor mostrar una de más que perderte una real."""
+    try:
+        resp = requests.get(link, headers=FEED_HEADERS, timeout=10)
+        if resp.status_code == 404:
+            return False
+        text = resp.text.lower()
+        return not any(phrase in text for phrase in CLOSED_PHRASES)
+    except Exception as e:
+        print(f"No se pudo verificar si sigue abierta ({link}): {e}")
+        return True
 
 
 def matches_profile(title, summary):
@@ -225,12 +261,15 @@ def fetch_new_jobs(searches=None, pages=0):
                 if job_id in SEEN:
                     continue
                 if is_too_old(entry):
-                    SEEN.add(job_id)
+                    SEEN.add(job_id)  # no lo volvemos a evaluar en corridas futuras
                     continue
                 title = entry.get("title", "Puesto sin título")
                 summary = clean_html(entry.get("summary", ""))
                 link = entry.get("link", "")
                 if not matches_profile(title, summary):
+                    continue
+                if not is_job_still_open(link):
+                    SEEN.add(job_id)  # ya sabemos que está cerrada, no la re-chequeamos
                     continue
                 new_jobs.append({"id": job_id, "title": title, "summary": summary[:280], "link": link})
                 SEEN.add(job_id)
