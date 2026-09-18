@@ -45,6 +45,8 @@ from email.header import decode_header
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
+from datetime import datetime, timezone, timedelta
+
 
 import feedparser
 import requests
@@ -503,7 +505,11 @@ def check_email_alerts():
     try:
         imap.login(address, app_password)
         imap.select("INBOX")
-        status, data = imap.search(None, "UNSEEN")
+        # Buscamos por FECHA reciente, no por "no leído" — así no depende de
+        # si abriste el mail en tu celular antes de que el bot lo revise.
+        # El control de "ya procesado" lo llevamos nosotros con seen_emails.json.
+        since_date = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%d-%b-%Y")
+        status, data = imap.search(None, f'(SINCE "{since_date}")')
         if status != "OK":
             return []
         ids = data[0].split()
@@ -516,10 +522,7 @@ def check_email_alerts():
             match = re.search(r"@([\w.-]+)", from_header)
             sender_domain = match.group(1).lower() if match else ""
 
-            portal = next(
-                (name for frag, name in EMAIL_SOURCES.items() if frag in sender_domain),
-                None,
-            )
+            portal = next((name for frag, name in EMAIL_SOURCES.items() if frag in sender_domain), None)
             if not portal:
                 continue
 
@@ -535,6 +538,10 @@ def check_email_alerts():
                 if job["link"] in SEEN:
                     continue
                 title = job["title"] or f"Nueva oferta en {portal}"
+                # Para mails: no exigimos que el título contenga una palabra
+                # clave nuestra — si LinkedIn (u otro portal) te mandó esta
+                # alerta, es porque ya matcheó TU búsqueda configurada ahí.
+                # Solo descartamos senior/semi-senior, igual que siempre.
                 if not matches_profile(title, "", require_keyword=False):
                     SEEN.add(job["link"])
                     continue
