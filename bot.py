@@ -83,34 +83,102 @@ SEARCHES = [
 
 NIVELES = ["pasantia", "junior", "trainee", "practicante"]
 AREAS = [
-    "backend", "ciberseguridad", "sistemas", "IT", "desarrollo",
-    "soporte tecnico", "redes", "devops", "cloud security", "pentester",
-    "python", "linux", "sysadmin", "soc", "seguridad informatica",
+    "backend",
+    "ciberseguridad",
+    "sistemas",
+    "IT",
+    "desarrollo",
+    "soporte tecnico",
+    "redes",
+    "devops",
+    "cloud security",
+    "pentester",
+    "python",
+    "linux",
+    "sysadmin",
+    "soc",
+    "seguridad informatica",
 ]
-_auto_searches = [(f"{n} {a}", "Argentina") for n, a in itertools.product(NIVELES, AREAS)]
+_auto_searches = [
+    (f"{n} {a}", "Argentina") for n, a in itertools.product(NIVELES, AREAS)
+]
 _vistos = {(q.lower(), l.lower()) for q, l in SEARCHES}
-DEEP_SEARCHES_EXTRA = [(q, l) for q, l in _auto_searches if (q.lower(), l.lower()) not in _vistos]
+DEEP_SEARCHES_EXTRA = [
+    (q, l) for q, l in _auto_searches if (q.lower(), l.lower()) not in _vistos
+]
 
 DEEP_SCAN_PAGES = 2
 DEEP_SCAN_HOURS_UTC = {12, 21}  # 9am y 18pm hora Argentina
 SCHEDULED_HOURS_UTC = set(range(12, 22))  # 9am-18pm ART
 
 DEFAULT_KEYWORDS = [
-    "pasant", "junior", "jr.", "jr ", "trainee", "practicante", "primer empleo",
-    "backend", "back-end", "back end", "fullstack", "full stack",
-    "ciberseguridad", "cybersecurity", "seguridad informatica", "seguridad de la informacion",
-    "networking", "redes", "soc", "pentest", "pentester", "red team", "blue team",
-    "devsecops", "devops", "cloud security", "seguridad en la nube",
-    "python", "linux", "fastapi", "sysadmin", "administrador de sistemas",
-    "ethical hacking", "hacking etico", "vulnerabilidades", "ciso",
+    "pasant",
+    "junior",
+    "jr.",
+    "jr ",
+    "trainee",
+    "practicante",
+    "primer empleo",
+    "backend",
+    "back-end",
+    "back end",
+    "fullstack",
+    "full stack",
+    "ciberseguridad",
+    "cybersecurity",
+    "seguridad informatica",
+    "seguridad de la informacion",
+    "networking",
+    "redes",
+    "soc",
+    "pentest",
+    "pentester",
+    "red team",
+    "blue team",
+    "devsecops",
+    "devops",
+    "cloud security",
+    "seguridad en la nube",
+    "python",
+    "linux",
+    "fastapi",
+    "sysadmin",
+    "administrador de sistemas",
+    "ethical hacking",
+    "hacking etico",
+    "vulnerabilidades",
+    "ciso",
 ]
 
 DEFAULT_EXCLUDE_KEYWORDS = [
-    "senior", "ssr.", "ssr ", "ssr/", "/ssr", "semi senior", "semi-senior",
-    "sr.", "sr ", "sr/", "/sr", "lead ", "team lead", "tech lead",
-    "gerente", "manager", "director", "jefe de", "coordinador", "coordinadora",
-    "responsable de", "head of", "principal ", "staff engineer", "arquitecto",
-    "amplia experiencia", "experiencia comprobada", "experiencia sólida",
+    "senior",
+    "ssr.",
+    "ssr ",
+    "ssr/",
+    "/ssr",
+    "semi senior",
+    "semi-senior",
+    "sr.",
+    "sr ",
+    "sr/",
+    "/sr",
+    "lead ",
+    "team lead",
+    "tech lead",
+    "gerente",
+    "manager",
+    "director",
+    "jefe de",
+    "coordinador",
+    "coordinadora",
+    "responsable de",
+    "head of",
+    "principal ",
+    "staff engineer",
+    "arquitecto",
+    "amplia experiencia",
+    "experiencia comprobada",
+    "experiencia sólida",
     "experiencia solida",
 ]
 
@@ -134,6 +202,7 @@ SEEN_EMAILS_FILE = Path(__file__).parent / "seen_emails.json"
 # ---------------------------------------------------------------------------
 # PERSISTENCIA (archivos locales en el disco de la VM)
 # ---------------------------------------------------------------------------
+
 
 def load_json_set(path):
     if path.exists():
@@ -204,13 +273,21 @@ def is_too_old(entry, max_days=MAX_JOB_AGE_DAYS):
 # directo en el texto de la página del aviso (no solo en el RSS, que no
 # informa esto).
 CLOSED_PHRASES = [
-    "ya no acepta postulaciones", "ya no acepta solicitudes",
-    "posición cerrada", "posicion cerrada", "vacante cerrada",
-    "empleo no disponible", "oferta no disponible",
-    "no longer accepting applications", "position has been filled",
-    "this job is no longer available", "job posting has expired",
-    "esta oferta ha expirado", "esta vacante ha finalizado",
-    "ya no está disponible", "ya no esta disponible",
+    "ya no acepta postulaciones",
+    "ya no acepta solicitudes",
+    "posición cerrada",
+    "posicion cerrada",
+    "vacante cerrada",
+    "empleo no disponible",
+    "oferta no disponible",
+    "no longer accepting applications",
+    "position has been filled",
+    "this job is no longer available",
+    "job posting has expired",
+    "esta oferta ha expirado",
+    "esta vacante ha finalizado",
+    "ya no está disponible",
+    "ya no esta disponible",
 ]
 
 
@@ -229,7 +306,7 @@ def is_job_still_open(link):
         return True
 
 
-def matches_profile(title, summary):
+def matches_profile(title, summary, require_keyword=True):
     text = f"{title} {summary}".lower()
     if any(bad in text for bad in STATE["exclude_keywords"]):
         return False
@@ -239,6 +316,8 @@ def matches_profile(title, summary):
                 return False
         except ValueError:
             pass
+    if not require_keyword:
+        return True
     return any(kw in text for kw in STATE["keywords"])
 
 
@@ -271,18 +350,36 @@ def fetch_new_jobs(searches=None, pages=0):
                 if not is_job_still_open(link):
                     SEEN.add(job_id)  # ya sabemos que está cerrada, no la re-chequeamos
                     continue
-                new_jobs.append({"id": job_id, "title": title, "summary": summary[:280], "link": link})
+                new_jobs.append(
+                    {
+                        "id": job_id,
+                        "title": title,
+                        "summary": summary[:280],
+                        "link": link,
+                    }
+                )
                 SEEN.add(job_id)
     return new_jobs
 
 
 REMOTE_KEYWORDS = [
-    "remoto", "remota", "remote", "home office", "teletrabajo",
-    "trabajo desde casa", "100% remoto", "full remoto",
+    "remoto",
+    "remota",
+    "remote",
+    "home office",
+    "teletrabajo",
+    "trabajo desde casa",
+    "100% remoto",
+    "full remoto",
 ]
 HYBRID_KEYWORDS = [
-    "hibrido", "híbrido", "hybrid", "semi presencial", "semi-presencial",
-    "mixta", "modalidad mixta",
+    "hibrido",
+    "híbrido",
+    "hybrid",
+    "semi presencial",
+    "semi-presencial",
+    "mixta",
+    "modalidad mixta",
 ]
 
 
@@ -299,9 +396,11 @@ def format_job_message(job):
     tag = get_modality_tag(job["title"], job.get("summary", ""))
     return f"🔔 *Nueva oferta:* {job['title']}\n{tag}\n📝 {job['summary']}\n\n🔗 Postularme: {job['link']}"
 
+
 # ---------------------------------------------------------------------------
 # MAIL DE ALERTAS (LinkedIn, Bumeran, Zonajobs, Computrabajo, GetOnBoard)
 # ---------------------------------------------------------------------------
+
 
 def decode_mime(value):
     if not value:
@@ -309,7 +408,11 @@ def decode_mime(value):
     parts = decode_header(value)
     out = ""
     for text, enc in parts:
-        out += text.decode(enc or "utf-8", errors="ignore") if isinstance(text, bytes) else text
+        out += (
+            text.decode(enc or "utf-8", errors="ignore")
+            if isinstance(text, bytes)
+            else text
+        )
     return out
 
 
@@ -337,13 +440,25 @@ JOB_URL_PATTERNS = {
 JUNK_LINK_RE = re.compile(
     r"(unsubscribe|opt-?out|preferences|settings|privacy|legal|terms|"
     r"help\b|support|notification|manage-alert|email-setting|feed\?|"
-    r"/search\?|/search/)", re.I
+    r"/search\?|/search/)",
+    re.I,
 )
 
 GENERIC_ANCHOR_TEXTS = {
-    "ver oferta", "ver empleo", "aplicar", "postularme", "postular",
-    "ver más", "ver mas", "click aquí", "click aqui", "apply now",
-    "view job", "see job", "ver todas las ofertas", "ver todos los empleos",
+    "ver oferta",
+    "ver empleo",
+    "aplicar",
+    "postularme",
+    "postular",
+    "ver más",
+    "ver mas",
+    "click aquí",
+    "click aqui",
+    "apply now",
+    "view job",
+    "see job",
+    "ver todas las ofertas",
+    "ver todos los empleos",
 }
 
 
@@ -354,7 +469,9 @@ def extract_job_links(html, portal):
     if not pattern:
         return []
 
-    anchor_re = re.compile(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I | re.S)
+    anchor_re = re.compile(
+        r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I | re.S
+    )
     seen_urls, out = set(), []
     for url, inner_html in anchor_re.findall(html):
         if JUNK_LINK_RE.search(url):
@@ -399,7 +516,10 @@ def check_email_alerts():
             match = re.search(r"@([\w.-]+)", from_header)
             sender_domain = match.group(1).lower() if match else ""
 
-            portal = next((name for frag, name in EMAIL_SOURCES.items() if frag in sender_domain), None)
+            portal = next(
+                (name for frag, name in EMAIL_SOURCES.items() if frag in sender_domain),
+                None,
+            )
             if not portal:
                 continue
 
@@ -415,7 +535,7 @@ def check_email_alerts():
                 if job["link"] in SEEN:
                     continue
                 title = job["title"] or f"Nueva oferta en {portal}"
-                if not matches_profile(title, ""):
+                if not matches_profile(title, "", require_keyword=False):
                     SEEN.add(job["link"])
                     continue
                 SEEN.add(job["link"])
@@ -430,9 +550,11 @@ def format_email_alert_message(item):
     tag = get_modality_tag(item["title"], "")
     return f"📧 *{item['portal']}:* {item['title']}\n{tag}\n🔗 {item['link']}"
 
+
 # ---------------------------------------------------------------------------
 # SEGURIDAD: solo responder a tu chat
 # ---------------------------------------------------------------------------
+
 
 def is_authorized(update: Update) -> bool:
     return str(update.effective_chat.id) == str(os.environ["TELEGRAM_CHAT_ID"])
@@ -446,12 +568,13 @@ REPLY_KEYBOARD = ReplyKeyboardMarkup(
         [KeyboardButton("/keywords"), KeyboardButton("/excluidas")],
     ],
     resize_keyboard=True,  # botones más chicos, no ocupan toda la pantalla
-    is_persistent=True,    # se queda fijo, no hay que volver a pedirlo
+    is_persistent=True,  # se queda fijo, no hay que volver a pedirlo
 )
 
 # ---------------------------------------------------------------------------
 # COMANDOS
 # ---------------------------------------------------------------------------
+
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
@@ -483,7 +606,9 @@ async def cmd_buscar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json_set(SEEN_FILE, SEEN)
 
     if not new_jobs:
-        await update.message.reply_text("No encontré ofertas nuevas en Indeed que matcheen tu perfil.")
+        await update.message.reply_text(
+            "No encontré ofertas nuevas en Indeed que matcheen tu perfil."
+        )
         return
     for job in new_jobs:
         await update.message.reply_text(format_job_message(job), parse_mode="Markdown")
@@ -504,7 +629,9 @@ async def cmd_escaneo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json_set(SEEN_FILE, SEEN)
 
     if not new_jobs:
-        await update.message.reply_text("Escaneo profundo terminado (Indeed): no encontré ofertas nuevas.")
+        await update.message.reply_text(
+            "Escaneo profundo terminado (Indeed): no encontré ofertas nuevas."
+        )
         return
     for job in new_jobs:
         await update.message.reply_text(format_job_message(job), parse_mode="Markdown")
@@ -515,17 +642,23 @@ async def cmd_mail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         return
     if not os.environ.get("EMAIL_ADDRESS"):
-        await update.message.reply_text("Todavía no configuraste EMAIL_ADDRESS / EMAIL_APP_PASSWORD.")
+        await update.message.reply_text(
+            "Todavía no configuraste EMAIL_ADDRESS / EMAIL_APP_PASSWORD."
+        )
         return
     await update.message.reply_text("📬 Revisando tu bandeja de entrada...")
     items = check_email_alerts()
     save_json_set(SEEN_EMAILS_FILE, SEEN_EMAILS)
     save_json_set(SEEN_FILE, SEEN)
     if not items:
-        await update.message.reply_text("No hay mails nuevos de los portales configurados.")
+        await update.message.reply_text(
+            "No hay mails nuevos de los portales configurados."
+        )
         return
     for item in items:
-        await update.message.reply_text(format_email_alert_message(item), parse_mode="Markdown")
+        await update.message.reply_text(
+            format_email_alert_message(item), parse_mode="Markdown"
+        )
         time.sleep(1)
 
 
@@ -556,26 +689,36 @@ async def cmd_sacar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     STATE["exclude_keywords"].append(palabra)
     save_state(STATE)
-    await update.message.reply_text(f'🚫 A partir de ahora excluyo ofertas con "{palabra}".')
+    await update.message.reply_text(
+        f'🚫 A partir de ahora excluyo ofertas con "{palabra}".'
+    )
 
 
 async def cmd_keywords(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         return
-    await update.message.reply_text("Palabras clave actuales:\n" + ", ".join(STATE["keywords"]))
+    await update.message.reply_text(
+        "Palabras clave actuales:\n" + ", ".join(STATE["keywords"])
+    )
 
 
 async def cmd_excluidas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         return
-    await update.message.reply_text("Palabras excluidas actuales:\n" + ", ".join(STATE["exclude_keywords"]))
+    await update.message.reply_text(
+        "Palabras excluidas actuales:\n" + ", ".join(STATE["exclude_keywords"])
+    )
 
 
 async def cmd_estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         return
     last_run = STATE.get("last_run")
-    last_run_txt = last_run.replace("T", " ").split(".")[0] + " UTC" if last_run else "todavía no corrió"
+    last_run_txt = (
+        last_run.replace("T", " ").split(".")[0] + " UTC"
+        if last_run
+        else "todavía no corrió"
+    )
     await update.message.reply_text(
         f"📊 Estado del bot (24/7)\n\n"
         f"Última corrida: {last_run_txt}\n"
@@ -586,9 +729,11 @@ async def cmd_estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Palabras excluidas: {len(STATE['exclude_keywords'])}"
     )
 
+
 # ---------------------------------------------------------------------------
 # BÚSQUEDA PROGRAMADA (corre sola, sin cron externo)
 # ---------------------------------------------------------------------------
+
 
 async def scheduled_search(context: ContextTypes.DEFAULT_TYPE):
     now_hour = datetime.now(timezone.utc).hour
@@ -608,7 +753,9 @@ async def scheduled_search(context: ContextTypes.DEFAULT_TYPE):
 
     if new_jobs:
         for job in new_jobs:
-            await context.bot.send_message(chat_id=chat_id, text=format_job_message(job), parse_mode="Markdown")
+            await context.bot.send_message(
+                chat_id=chat_id, text=format_job_message(job), parse_mode="Markdown"
+            )
             time.sleep(1)
     elif now_hour in (12, 21):
         await context.bot.send_message(
@@ -622,28 +769,36 @@ async def scheduled_search(context: ContextTypes.DEFAULT_TYPE):
             save_json_set(SEEN_EMAILS_FILE, SEEN_EMAILS)
             save_json_set(SEEN_FILE, SEEN)
             for item in email_items:
-                await context.bot.send_message(chat_id=chat_id, text=format_email_alert_message(item), parse_mode="Markdown")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=format_email_alert_message(item),
+                    parse_mode="Markdown",
+                )
                 time.sleep(1)
         except Exception as e:
             print(f"Error revisando mail: {e}")
+
 
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 async def _post_init(app: Application):
     """Configura el menú nativo de comandos de Telegram (el ícono '/' al lado del teclado)."""
-    await app.bot.set_my_commands([
-        BotCommand("buscar", "Buscar ofertas ahora (rápida)"),
-        BotCommand("escaneo", "Escaneo profundo (más búsquedas)"),
-        BotCommand("mail", "Revisar alertas por mail"),
-        BotCommand("agregar", "Sumar palabra clave"),
-        BotCommand("sacar", "Excluir palabra"),
-        BotCommand("keywords", "Ver palabras clave"),
-        BotCommand("excluidas", "Ver palabras excluidas"),
-        BotCommand("estado", "Ver última corrida"),
-        BotCommand("ayuda", "Ver esta lista y mostrar botones"),
-    ])
+    await app.bot.set_my_commands(
+        [
+            BotCommand("buscar", "Buscar ofertas ahora (rápida)"),
+            BotCommand("escaneo", "Escaneo profundo (más búsquedas)"),
+            BotCommand("mail", "Revisar alertas por mail"),
+            BotCommand("agregar", "Sumar palabra clave"),
+            BotCommand("sacar", "Excluir palabra"),
+            BotCommand("keywords", "Ver palabras clave"),
+            BotCommand("excluidas", "Ver palabras excluidas"),
+            BotCommand("estado", "Ver última corrida"),
+            BotCommand("ayuda", "Ver esta lista y mostrar botones"),
+        ]
+    )
 
 
 def main():
