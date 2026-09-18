@@ -464,6 +464,21 @@ GENERIC_ANCHOR_TEXTS = {
 }
 
 
+def resolve_redirect(url):
+    """Sigue un link de tracking/redirect (ej: Zonajobs envuelve todos sus
+    links en delivery.zonajobs.com.ar) y devuelve la URL final real."""
+    try:
+        resp = requests.head(url, headers=FEED_HEADERS, timeout=8, allow_redirects=True)
+        return resp.url
+    except Exception:
+        try:
+            resp = requests.get(url, headers=FEED_HEADERS, timeout=8, allow_redirects=True, stream=True)
+            resp.close()
+            return resp.url
+        except Exception:
+            return url  # si falla, seguimos con la url original
+
+
 def extract_job_links(html, portal):
     if not html:
         return []
@@ -471,16 +486,25 @@ def extract_job_links(html, portal):
     if not pattern:
         return []
 
-    anchor_re = re.compile(
-        r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I | re.S
-    )
+    anchor_re = re.compile(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I | re.S)
     seen_urls, out = set(), []
+    resolved_count = 0
+
     for url, inner_html in anchor_re.findall(html):
         if JUNK_LINK_RE.search(url):
             continue
+
+        final_url = url
         if not pattern.search(url):
-            continue
-        short_url = url.split("?")[0]
+            # No matchea directo: puede ser un link de tracking/redirect
+            # (ej: Zonajobs). Lo seguimos, con un tope por mail.
+            if resolved_count < 20 and url.startswith("http"):
+                final_url = resolve_redirect(url)
+                resolved_count += 1
+            if JUNK_LINK_RE.search(final_url) or not pattern.search(final_url):
+                continue
+
+        short_url = final_url.split("?")[0]
         if short_url in seen_urls:
             continue
         seen_urls.add(short_url)
@@ -492,7 +516,6 @@ def extract_job_links(html, portal):
         if len(out) >= 15:
             break
     return out
-
 
 def check_email_alerts():
     address = os.environ.get("EMAIL_ADDRESS")
